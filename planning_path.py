@@ -22,7 +22,27 @@ def get_turning_circle(c_pos, cdirection, turning_radius, density):
 
 
 def get_tanget_line(circle1, circle2, diameter):
-    pass
+    # circle1, circle2 각각 원의 중심 좌표
+    # diameter : 원의 지름
+    r = diameter / 2
+    
+    distance = np.pow((circle1[0] - circle2[0]), 2) + np.pow((circle1[1] - circle2[1]), 2)
+    distance = np.sqrt(distance) # 윈의 중심 사이의 거리
+    # theta : 원의 중심을 잇는 선분과 두개의 평행한 접선이 이루는 각
+    tan_theta = r / distance
+    theta = np.arctan(tan_theta)
+    offset = np.array([np.sin(theta), -np.cos(theta)])
+    point_l1_c1 = circle1 + offset
+    point_l1_c2 = circle2 + offset
+    point_l4_c1 = circle1 - offset
+    point_l4_c2 = circle2 - offset
+
+    # delta : 나머지 교차하는 접선과 원의 중심을 잇는 선분이 이루는 각
+    sin_delta = (distance / 2) / (r)
+    delta = np.arcsin(sin_delta)
+    
+    
+    
 
 def get_path(cx, cy, cdirection, gx, gy, turning_radius):
     # 회전 반경 원 점 개수
