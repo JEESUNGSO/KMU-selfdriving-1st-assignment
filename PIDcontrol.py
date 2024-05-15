@@ -28,20 +28,38 @@ def rotate_by_vec(vec, ref_vec):
 
 def get_error(xy, lxy, velo, di):
     # 교점 후보 허용 오차
-    tolerance = 8
+    tolerance = 4
 
     # 모든 path 점들과 거리 구하기
     dx = lxy[0] - xy[0]
     dy = lxy[1] - xy[1]
     distance = np.sqrt(dx ** 2 + dy ** 2)
 
-    # 거리가 di와 가까운 점들이 아닌 점들 거리 0으로
-    distance[(distance < di - tolerance)] = 0
-    distance[(distance > di + tolerance)] = 0
+    # 초기값 초기화
+    distance_largers = distance.copy()
+    distance_smallers = distance.copy()
+    distance_on = distance.copy()
 
-    # 거리가 di에 가까우 점들을 순서대로 나열하고 뒤에 4개를 취하고
-    # 그 중에서 가장 나중 경로인 점을 선택
-    selected_point = lxy.T[np.max(np.argsort(distance)[-4:-1])]
+    distance_largers[(distance <= di + tolerance)] = 0 # 원 보다 멀리 있는 것들
+    distance_smallers[(distance >= di - tolerance)] = 0 # 원 보다 가까이 있는 것들
+    # 원 위의 점들
+    distance_on[(distance > di + tolerance)] = 0
+    distance_on[(distance < di - tolerance)] = 0
+    #print(f"larger: {distance_largers[distance_largers!=0].shape[0]}, smaller: {distance_smallers[distance_smallers!=0].shape[0]}, on: {distance_on[distance_on!=0].shape[0]}")
+
+    if np.min(distance_largers) > di - tolerance: # 점이 밖에 있을때
+        print("larger!!!")
+        selected_point = lxy.T[np.max(np.argsort(distance_largers)[1:4])]
+
+    else: # 점이 원 위나 안에 있을때
+        if len(np.where(np.where(distance_smallers != 0)[0] >= distance.shape[0]-2)[0]): # 마지막 점이 원 안에 있으면 (마지막에 가까운점)
+            print("end point is inside!")
+            selected_point = lxy.T[distance.shape[0]-1]
+        else: # 점이 위에있을 때
+            print("on circle!!!")
+            selected_point = lxy.T[np.max(np.argsort(distance_on)[-4:-1])]
+
+
 
     # 회전 시키
     car_to_point = xy - selected_point
@@ -49,7 +67,6 @@ def get_error(xy, lxy, velo, di):
 
 
     error = rotation_vector[1]
-    print(rotation_vector)
 
     return error, selected_point
 
@@ -65,10 +82,10 @@ def get_error(xy, lxy, velo, di):
 
 accuE = bef_error = 0
 
-def track_one_step(pos, lxy, velo, Kp, Ki, Kd, diameter, dt):
+def track_one_step(pos, velo, lxyD, Kp, Ki, Kd, diameter, dt):
     global accuE, bef_error
     pos = np.array(pos, dtype=float)
-    lxy = np.array(lxy, dtype=float)
+    lxy = np.array(lxyD[:2], dtype=float)
 
     error, sel_p = get_error(pos, lxy, velo, diameter)
 

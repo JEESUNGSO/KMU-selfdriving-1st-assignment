@@ -28,7 +28,7 @@ xycar_msg = xycar_motor()
 # 프로그램에서 사용할 변수, 저장공간 선언부
 #=============================================
 rx, ry = [300, 350, 400, 450], [300, 350, 400, 450]
-
+Dqcar_cP = 1
 
 #=============================================
 # 프로그램에서 사용할 상수 선언부
@@ -80,14 +80,14 @@ def planning(sx, sy, syaw, max_acceleration, dt):
 def tracking(screen, x, y, yaw, current_speed, max_acceleration, dt):
     # yaw 값은 degree
 
-    global rx, ry, Kp, Ki, Kd, DIAMETER
+    global rx, ry, Dqcar_cP, Kp, Ki, Kd, DIAMETER
     # 값들 전처리
     direction = np.deg2rad(-yaw)
     velocity = np.array([np.cos(direction), np.sin(direction)], dtype=float) * current_speed
 
     # print("direction: ", direction, "  yaw: ", yaw, "  velocity: ", velocity)
 
-    u, sel_p = track_one_step([x,y], [rx, ry], velocity, Kp, Ki, Kd, DIAMETER, dt)
+    u, sel_p = track_one_step([x,y], velocity, [rx, ry, Dqcar_cP], Kp, Ki, Kd, DIAMETER, dt)
 
     # pid 탐색 반경 표시
     pygame.draw.circle(screen, (255,0,0), [x, y], DIAMETER, width=2)
@@ -97,6 +97,6 @@ def tracking(screen, x, y, yaw, current_speed, max_acceleration, dt):
     # 에러계산 선택점 표시
     pygame.draw.circle(screen, (0, 255, 0), sel_p, 10)
 
-    print("u: ", u)
+    #print("u: ", u)
     drive(u, 50)
 
