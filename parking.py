@@ -16,6 +16,7 @@ from xycar_msgs.msg import xycar_motor
 from planning_path_circle import *
 from planning_path_line import *
 from planning_path_MPC import *
+from planning_path_ES import *
 from PIDcontrol import track_one_step
 
 #=============================================
@@ -28,7 +29,8 @@ xycar_msg = xycar_motor()
 # 프로그램에서 사용할 변수, 저장공간 선언부
 #=============================================
 rx, ry = [300, 350, 400, 450], [300, 350, 400, 450]
-Dqcar_cP = 1
+cp_index = dir_change_exist = dir_changed = speed= 0
+
 
 #=============================================
 # 프로그램에서 사용할 상수 선언부
@@ -36,12 +38,18 @@ Dqcar_cP = 1
 AR = (1142, 62) # AR 태그의 위치
 P_ENTRY = (1036, 162) # 주차라인 진입 시점의 좌표
 P_END = (1129, 69) # 주차라인 끝의 좌표
+
 TURNING_RADIUS = 461.5769323875713/2 # 회전 반경
 
 # PID 값
 Kp = 0.5
 Ki = 0.0000001
 Kd = 0.001
+
+#경로생성 가중치
+wDistance = 15000
+wTheta = 1
+search_length = 300
 
 # PID 오류 탐색 원의 크기
 DIAMETER = 200
@@ -63,12 +71,19 @@ def drive(angle, speed):
 # 경로를 리스트를 생성하여 반환한다.
 #=============================================
 def planning(sx, sy, syaw, max_acceleration, dt):
-    global rx, ry
-    direction = np.deg2rad(-syaw)
+    global rx, ry, cp_index, dir_change_exist, wDistance, wTheta, search_length
     print("Start Planning")
-    rx, ry = get_path_line(sx, sy, P_ENTRY[0], P_ENTRY[1])
-    #rx, ry = get_path_circle(sx, sy, direction, P_ENTRY[0], P_ENTRY[1], TURNING_RADIUS)
+    rad_car = np.deg2rad(syaw-90)
+    print("syaw: ", syaw)
+    q_car = np.array([sx, sy, rad_car])
+    rad_park = np.arctan2(P_ENTRY[1] - P_END[1], P_ENTRY[0] - P_END[0])
+    q_park = np.array([P_ENTRY[0], P_ENTRY[1], rad_park])
+
+    #rx, ry = get_path_line(sx, sy, P_ENTRY[0], P_ENTRY[1])
+    #rx, ry = get_path_circle(sx, sy, rad_car, P_ENTRY[0], P_ENTRY[1], TURNING_RADIUS)
     #rx, ry = gey_path_MPC()
+    rx, ry, cp_index, dir_change_exist = get_path_ES(q_car, q_park, wDistance, wTheta, search_length)
+    #rx, ry = get_path_ES(q_car, q_park, wDistance, wTheta) # 원 디버깅용
     return rx, ry
 
 #=============================================
@@ -80,14 +95,31 @@ def planning(sx, sy, syaw, max_acceleration, dt):
 def tracking(screen, x, y, yaw, current_speed, max_acceleration, dt):
     # yaw 값은 degree
 
-    global rx, ry, Dqcar_cP, Kp, Ki, Kd, DIAMETER
+    global rx, ry, Kp, Ki, Kd, DIAMETER, D, dir_change_exist, dir_changed
     # 값들 전처리
     direction = np.deg2rad(-yaw)
     velocity = np.array([np.cos(direction), np.sin(direction)], dtype=float) * current_speed
 
     # print("direction: ", direction, "  yaw: ", yaw, "  velocity: ", velocity)
 
-    u, sel_p = track_one_step([x,y], velocity, [rx, ry, Dqcar_cP], Kp, Ki, Kd, DIAMETER, dt)
+    # 전진 후진 전환 존재 할때
+    if dir_change_exist:
+        # cp 후 부터
+        if dir_changed:
+            print("전진")
+            u, sel_p, sel_p_index = track_one_step([x, y], velocity, [rx[cp_index+1:], ry[cp_index+1:]], Kp, Ki, Kd, DIAMETER, dt)
+            speed = +50
+        # cp 전 까지
+        else:
+            print("후진")
+            u, sel_p, sel_p_index = track_one_step([x, y], velocity, [rx[:cp_index+1], ry[:cp_index+1]], Kp, Ki, Kd, DIAMETER, dt)
+            speed = -50
+            if sel_p_index == cp_index:
+                dir_changed = 1
+    # 전진 후진 전환 존재 안할때 (전진만 할때)
+    else:
+        u, sel_p, sel_p_index = track_one_step([x, y], velocity, [rx, ry], Kp, Ki, Kd, DIAMETER, dt)
+        speed = 50
 
     # pid 탐색 반경 표시
     pygame.draw.circle(screen, (255,0,0), [x, y], DIAMETER, width=2)
@@ -98,5 +130,5 @@ def tracking(screen, x, y, yaw, current_speed, max_acceleration, dt):
     pygame.draw.circle(screen, (0, 255, 0), sel_p, 10)
 
     #print("u: ", u)
-    drive(u, 50)
+    drive(u, speed)
 

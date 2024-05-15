@@ -49,15 +49,19 @@ def get_error(xy, lxy, velo, di):
 
     if np.min(distance_largers) > di - tolerance: # 점이 밖에 있을때
         print("larger!!!")
-        selected_point = lxy.T[np.max(np.argsort(distance_largers)[1:4])]
+        sel_p_index = np.max(np.argsort(distance_largers)[1:4])
+        selected_point = lxy.T[sel_p_index]
+
 
     else: # 점이 원 위나 안에 있을때
         if len(np.where(np.where(distance_smallers != 0)[0] >= distance.shape[0]-2)[0]): # 마지막 점이 원 안에 있으면 (마지막에 가까운점)
             print("end point is inside!")
-            selected_point = lxy.T[distance.shape[0]-1]
+            sel_p_index = np.max(distance.shape[0]-1)
+            selected_point = lxy.T[sel_p_index]
         else: # 점이 위에있을 때
             print("on circle!!!")
-            selected_point = lxy.T[np.max(np.argsort(distance_on)[-4:-1])]
+            sel_p_index = np.max(np.argsort(distance_on)[-4:-1])
+            selected_point = lxy.T[sel_p_index]
 
 
 
@@ -68,7 +72,7 @@ def get_error(xy, lxy, velo, di):
 
     error = rotation_vector[1]
 
-    return error, selected_point
+    return error, selected_point, sel_p_index
 
 
 
@@ -82,12 +86,12 @@ def get_error(xy, lxy, velo, di):
 
 accuE = bef_error = 0
 
-def track_one_step(pos, velo, lxyD, Kp, Ki, Kd, diameter, dt):
+def track_one_step(pos, velo, lxy, Kp, Ki, Kd, diameter, dt):
     global accuE, bef_error
     pos = np.array(pos, dtype=float)
-    lxy = np.array(lxyD[:2], dtype=float)
+    lxy = np.array(lxy, dtype=float)
 
-    error, sel_p = get_error(pos, lxy, velo, diameter)
+    error, sel_p, sel_p_index = get_error(pos, lxy, velo, diameter)
 
 
     #==P==
@@ -101,4 +105,5 @@ def track_one_step(pos, velo, lxyD, Kp, Ki, Kd, diameter, dt):
 
     #==컨트롤 하기==
     u = p + d + i
-    return u, sel_p
+
+    return u, sel_p, sel_p_index
