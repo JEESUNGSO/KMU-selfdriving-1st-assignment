@@ -15,12 +15,15 @@ def D(Kd, error, bef_error, dt):
 
 # 벡터 회전 함수
 def rotate_by_vec(vec, ref_vec):
-    if ref_vec[0] == 0: ref_vec[0] = 0.000001
     theta = np.arctan2(ref_vec[1], ref_vec[0])
     R = np.array([[np.cos(-theta), -np.sin(-theta)],
                   [np.sin(-theta), np.cos(-theta)]])
 
     return R @ vec
+
+
+
+
 
 
 def get_error(xy, lxy, velo, di):
@@ -60,7 +63,10 @@ def get_error(xy, lxy, velo, di):
 
 
 
-def track_one_step(pos, lxy, velo, Kp, Ki, Kd, diameter, accuE, bef_error, dt):
+accuE = bef_error = 0
+
+def track_one_step(pos, lxy, velo, Kp, Ki, Kd, diameter, dt):
+    global accuE, bef_error
     pos = np.array(pos, dtype=float)
     lxy = np.array(lxy, dtype=float)
 
@@ -78,4 +84,4 @@ def track_one_step(pos, lxy, velo, Kp, Ki, Kd, diameter, accuE, bef_error, dt):
 
     #==컨트롤 하기==
     u = p + d + i
-    return u, accuE, bef_error, sel_p
+    return u, sel_p

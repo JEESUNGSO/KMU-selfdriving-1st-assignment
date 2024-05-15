@@ -13,7 +13,9 @@ import numpy as np
 import math
 import rospy
 from xycar_msgs.msg import xycar_motor
-from planning_path import *
+from planning_path_circle import *
+from planning_path_line import *
+from planning_path_MPC import *
 from PIDcontrol import track_one_step
 
 #=============================================
@@ -26,8 +28,7 @@ xycar_msg = xycar_motor()
 # 프로그램에서 사용할 변수, 저장공간 선언부
 #=============================================
 rx, ry = [300, 350, 400, 450], [300, 350, 400, 450]
-accuE = bef_error = 0
-cnt = 0
+
 
 #=============================================
 # 프로그램에서 사용할 상수 선언부
@@ -65,7 +66,9 @@ def planning(sx, sy, syaw, max_acceleration, dt):
     global rx, ry
     direction = np.deg2rad(-syaw)
     print("Start Planning")
-    rx, ry = get_path(sx, sy, direction, P_ENTRY[0], P_ENTRY[1], TURNING_RADIUS)
+    rx, ry = get_path_line(sx, sy, P_ENTRY[0], P_ENTRY[1])
+    #rx, ry = get_path_circle(sx, sy, direction, P_ENTRY[0], P_ENTRY[1], TURNING_RADIUS)
+    #rx, ry = gey_path_MPC()
     return rx, ry
 
 #=============================================
@@ -77,14 +80,14 @@ def planning(sx, sy, syaw, max_acceleration, dt):
 def tracking(screen, x, y, yaw, current_speed, max_acceleration, dt):
     # yaw 값은 degree
 
-    global rx, ry, Kp, Ki, Kd, DIAMETER, accuE, bef_error, cnt
+    global rx, ry, Kp, Ki, Kd, DIAMETER
     # 값들 전처리
     direction = np.deg2rad(-yaw)
     velocity = np.array([np.cos(direction), np.sin(direction)], dtype=float) * current_speed
 
     # print("direction: ", direction, "  yaw: ", yaw, "  velocity: ", velocity)
 
-    u, accuE, bef_error, sel_p = track_one_step([x,y], [rx, ry], velocity, Kp, Ki, Kd, DIAMETER, accuE, bef_error, dt)
+    u, sel_p = track_one_step([x,y], [rx, ry], velocity, Kp, Ki, Kd, DIAMETER, dt)
 
     # pid 탐색 반경 표시
     pygame.draw.circle(screen, (255,0,0), [x, y], DIAMETER, width=2)

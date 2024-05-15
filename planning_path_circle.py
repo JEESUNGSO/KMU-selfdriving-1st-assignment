@@ -1,10 +1,7 @@
 import numpy as np
 
 
-# def get_path(cx, cy, gx, gy):
-#     lx = np.arange(cx, gx, 1, dtype=float)
-#     ly = (cy-gy)/(cx-gx) * (lx-cx) + cy
-#     return lx, ly
+
 
 
 def get_turning_circle(c_pos, cdirection, turning_radius, density):
@@ -44,7 +41,7 @@ def get_tanget_line(circle1, circle2, diameter):
     
     
 
-def get_path(cx, cy, cdirection, gx, gy, turning_radius):
+def get_path_circle(cx, cy, cdirection, gx, gy, turning_radius):
     # 회전 반경 원 점 개수
     density = 100
     
