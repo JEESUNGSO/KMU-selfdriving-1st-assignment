@@ -1,112 +1,109 @@
 import numpy as np
 
-#벡터 회전 함수
-def global2local(local_init_q, q):
-    R = np.array([[np.cos(-local_init_q.T[2]), -np.sin(-local_init_q.T[2])],
-                  [np.sin(-local_init_q.T[2]), np.cos(-local_init_q.T[2])]])
+# 좌표계를 변환하는 함수 (==========================================이 함수 고쳐야 됨!!)============================
+def To_coordinate(q_coordinates, q_):
 
-    new_vec = R @ q.T[1:2]
-    return np.array([new_vec[0], new_vec[1], q.T[2] - local_init_q.T[2]]).T
+    # q_cordinate와 어떤 q점 사이의 거리
+    lengths = np.linalg.norm(q_coordinates[:, :2] - q_[:2])
+    # q_cordinate와 어떤 q점(기준) 벡터의 각도
+    thetas = np.arctan2(q_coordinates[:, 1] - q_[1], q_coordinates[:, 0] - q_[0])
+    gammas = thetas - ((np.pi / 2) + q_coordinates[:, 2])
+    lx_ = q_coordinates[:, 0] + lengths * np.sin(gammas)
+    ly_ = q_coordinates[:, 1] - lengths * np.cos(gammas)
 
-def eTheta(thetai, theta_goal):
-    return thetai - theta_goal
+    # 좌표계 변환된 q 반환, 글로벌 각도는 유지
+    q_rad = [q_[2] for i in range(len(lx_))]
+    return np.array([lx_, ly_, q_rad]).T
 
-def eP(xi, yi, gxy):
-    return np.array([xi - gxy[0], yi - gxy[1]]).T
-
-def du(ui_minus1, ui):
-    return ui - ui_minus1
-
-def qi_1(qi, ui, D):
-    qix = qi.T[0]
-    qiy = qi.T[1]
-    qitheta = qi.T[2]
-
-    steering_input = ui.T[0]
-    step_length = ui.T[1]
-
-    qi_1x = qix + D*step_length*np.cos(qitheta + D*steering_input*step_length/2.0)
-    qi_1y = qiy + D*step_length*np.sin(qitheta + D*steering_input*step_length/2.0)
-    qi_1theta = qitheta + D*steering_input*step_length
-
-    return np.array([qi_1x, qi_1y, qi_1theta])
+# 장애물 점 리스트 생성
+def get_points_from_dotlist(points_list):
+    # 두점을 잇는 선분의 점집합 생성
+    def get_dots(p1, p2):
+        p1 = np.array(p1)
+        p2 = np.array(p2)
+        theta = np.arctan2(p1[1] - p2[1], p1[0] - p2[0])
+        l = np.arange(0, np.linalg.norm(p1 - p2), 1)
+        lx = p1[0] + l * np.cos(theta)
+        ly = p1[1] + l * np.sin(theta)
+        lxy = np.array([lx, ly]).T
+        return lxy
 
 
 
-def get_path_MPC(s_pos, s_vec, end_pos, end_vec, RTHETA_A, R_A, RU_A, wall_front_middle_point):
-    # 사용할 변수 및 상수
-    # rtheta = 0
-    # R = 0
-    # phase = "B"
-    cntMax = 30 #c 최대 방향전환 횟수
-    k = 30 # 최대 비용 변화 허용치
-    epsilon = 0.1 # 도착 허용오차
-    iMax = 0 # 최대 경로 생성 시도 횟수
-    cnt = 0  # 전진 후진 변경 횟수
-    i = 0  # 경로 생성 시도 횟수
-    cost_qi = np.inf # i번째 최소 코스트
-    D = 1 # 초기 진행방향 1: 전지 -1: 후진
+    for i in range(len(points_list)):
+        # 처음 점일 때
+        if i == 0:
+            result = get_dots(points_list[i], points_list[0])
+        # 마지막 점일때
+        elif i == len(points_list)-1:
+            np.concatenate((result, get_dots(points_list[i], points_list[0])))
+        # 마지막 점이 아닐 때
+        else:
+            np.concatenate((result, get_dots(points_list[i], points_list[i+1])))
+
+    return result
 
 
 
-    # u, 제어값 [steering_input, step_length]
-    ui_minus1 = np.array([0,0]).T
+# 비용함수, q_is: q_i 후보들, q_park: 도착지점, u_is: q_iplus1s를 만드는 정책, u_iminus1: q_i를 만들었던 정책
+def cost(q_iplus1s, q_park, u_is, u_iminus1, wTHETA, wPOS, wU):
+    # q_iplus1 좌표계 기준으로 변경된 q_park들
+    q_parks = To_coordinate(q_iplus1s, q_park)
+    eposS = [(( q_parks[:, :2]) ** 2)[:, 0] * wPOS[0], ((q_parks[:, :2]) ** 2)[:, 1] * wPOS[1]]
+    ethetaS = (q_iplus1s[:, 2] - q_park[2]) ** 2
+    deltauS = (u_is - u_iminus1) ** 2
+
+    # etheta: 후보 위치와 도착지점 각도 차이, epos: 멘하턴 거리, deltau: 이전정책과 현재 정책 변화량
+    return wTHETA * ethetaS + np.sum(eposS) + wU * deltauS
     
-    # qi 현재 상태 qO 도착지 상태, [x, y, rad], 차량 좌표계 기준, 일단 각도는 차이를 구해서 쓰는것 같아서 글로벌 좌표계 기준으로 했음
-    qi = np.array([0, 0, 0]).T # 차량 좌표계 기준
-    qO = global2local(np.array([s_pos[0], s_pos[1], np.arctan2(s_vec[1], s_vec[0])]).T, np.array([end_pos[0], end_pos[1], np.arctan2(end_vec[1], end_vec[0])]).T) # 차량 좌표계 기준으로 변환
 
-    # 벽 차량 기준 좌표
-    wall_pos = global2local(np.array([s_pos[0], s_pos[1], np.arctan2(s_vec[1], s_vec[0])]).T, np.array(wall_front_middle_point + [0]).T) # 벽 좌표 list형식
+# q_car: 차량 출발 위치, q_park: 주차 위치, w~: 가중치, step_length: 한번 탐색 길이(이거는 알아내야 함), k: 비용 최대 허용 증가 배수 가중치
+# iMax: 최대 경로 탐색 횟수, cntMax: 최대 경로 변경 횟수, epsilon: 근접 판정 허용치
+def get_path_MPC(q_car, q_park, obstacle_points, step_length, wTHETA, wPOS, wU, k, iMax, cntMax, epsilon):
+    # 결과 경로 리스트
+    result = []
+    # 변수 초기화
+    q_i = q_car # 초기 시작점
+    u_iminus1 = 0 # 초기 조정값은 0
+    cost_i = np.inf
+    D = 1 # 기본 진행 방향
+    cnt = 0 # 진행 방향 횟수
+    i = 0 # 경로 탐색 진행 횟수
 
-    # 스텝 반복
+    # 장애물 점의 집합 계산
+    obstacles = get_points_from_dotlist(obstacle_points)
+
+    # 경로 탐색
     while True:
-        # ==== 최적 정책 u* 구하기====
-        e_theta_pi_1 = eTheta(qi.T[3] - qO.T[3]) # theta 에러값
-        e_p_i_1 = eP(qi.T[0], qi.T[1], end_pos) # position 에러값
-
-        # 테스트할 정책들 -50 < steering_input < 50 탐색 간격은 1º로, step_length = 50
-        list_ui = [np.array([np.deg2rad(steering_input), 50]) for steering_input in np.arange(-50, 50, 1)]
-        list_cost = []  # 코스트들 저장할 변수
-
-        # 모든 정책들의 cost 구하기
-        for ui in list_ui:
-            d_u = du(ui, ui_minus1) # 정책 변화량
-
-            # 정책을 조정해서 최소화할 cost값 계산
-            cost_qi_1 = RTHETA_A * e_theta_pi_1**2 + e_p_i_1.T*R_A@e_p_i_1.T + RU_A * d_u**2
-
-            # cost값 추가
-            list_cost.append(cost_qi_1)
-
-        #cost를 최소화 하는 u와 최소 cost 구하기
-        index_min = np.argmin(list_cost)
-        ui = list_ui[index_min]
-        cost_qi_1 = list_cost[index_min]
+        print("q_i: ", q_i)
+        #경로 추가
+        result.append(q_i[:2])
 
 
-        #====phase B to phase A 변경 이벤트 감지====
-        # 이게 뭔지 아직 잘 모르겠음 일단 패스
-        # if (차량 주차구역 접근 정도 거리 휴리스틱, 주차 종류별로 다름, 주차구역 기준 좌표계) and phase == "B":
-        #     phase = "A"
-        #     R = R_A
-        #     rtheta = RTHETA_A
+        # 모든 후보점 탐색, theta p_i 점에서 원을 회전시켜서 얻는 점들
+        candi_us = np.array([u for u in np.linspace(-np.deg2rad(50), np.deg2rad(50), 100)])
+        candi_qs = np.array([[q_i[0] + D*step_length*np.cos(q_i[2] + D*step_length*u/2), q_i[1] + D*step_length*np.sin(q_i[2] + D*step_length*u/2), q_i[2] + D*step_length*u] for u in np.linspace(-np.deg2rad(50), np.deg2rad(50), 100)])
+        candi_costs = cost(candi_qs, q_park, candi_us, u_iminus1, wTHETA, wPOS, wU)
+
+        # 후보점들 중 코스트가 최소인 q_iplus1 구하기
+        q_iplus1_index = np.argmin(candi_costs)
+        cost_iplus1 = candi_costs[q_iplus1_index]
+        q_iplus1 = candi_qs[q_iplus1_index]
+        u_i= candi_us[q_iplus1_index] # 최적 정책
+
+        # 진행 방향 변경 지점 찾기(cost가 급격하게 상승할때, 최적 정책으로 진행하면 장애물을 만날때)
+        if cost_iplus1 > k * cost_i and np.linalg.norm(obstacles - q_iplus1) < epsilon:
+            D *= -1 # 방향 전환
+            cnt += 1
+        # 계속해서 다음 진행 방향 탐색
+        else:
+            q_i = q_iplus1
+            u_iminus1 = u_i
 
 
-        #====전후진 변경 이벤트 감지====
-        margin = 10 # 벽으로 부터 떨어진 거리 여유
-        if (cost_qi_1 > k * cost_qi)or (wall_pos[0] + margin):
-            D *= -1 # 전진 후진 변경
-            cnt += 1 # 전진 후진 변경 횟수 추가
-
-        #====다음스텝 업데이트====
-        qi = qi_1(qi, ui, D)
-        qO = global2local(qi, np.array([end_pos[0], end_pos[1], np.arctan2(end_vec[1], end_vec[0])]).T)  # 차량 좌표계 기준으로 변환
-        wall_pos = global2local(qi, np.array(wall_front_middle_point + [0]).T)
-        cost_qi = cost_qi_1
-
-        #====경로탐색 끝 이벤트 감지====
-        if (cnt > cntMax) or (i > iMax) or (np.linalg.norm(qi - qO) < epsilon):
+        # 탐색 종료 시점 판별
+        if np.linalg.norm(q_i[:2] - q_park[:2]) < epsilon or i > iMax or cnt > cntMax:
             break
 
-        i += 1 #시도횟수 추가
+    result = np.array(result).T
+    return result[0], result[1]

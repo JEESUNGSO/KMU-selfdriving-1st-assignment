@@ -72,7 +72,7 @@ def get_error(xy, lxy, velo, di):
 
     error = rotation_vector[1]
 
-    return error, selected_point, sel_p_index
+    return error, selected_point
 
 
 
@@ -91,7 +91,7 @@ def track_one_step(pos, velo, lxy, Kp, Ki, Kd, diameter, dt):
     pos = np.array(pos, dtype=float)
     lxy = np.array(lxy, dtype=float)
 
-    error, sel_p, sel_p_index = get_error(pos, lxy, velo, diameter)
+    error, sel_p = get_error(pos, lxy, velo, diameter)
 
 
     #==P==
@@ -106,4 +106,4 @@ def track_one_step(pos, velo, lxy, Kp, Ki, Kd, diameter, dt):
     #==컨트롤 하기==
     u = p + d + i
 
-    return u, sel_p, sel_p_index
+    return u, sel_p

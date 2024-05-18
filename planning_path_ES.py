@@ -45,14 +45,18 @@ def crossed_point(q_car, q_park, serach_length):
     else:
         return None # 교점 없음 반환
 
-def get_close_point(q_car, q_park, serach_length, cp):
+def get_close_point(q_car, q_park,  cp, initial_length):
+    # 허용 오차
+    tolerance = 10
+
     # 앞 뒤 탐색 막대 끝점
-    fend = q_car[:2] + np.array([np.cos(q_car[2]), np.sin(q_car[2])]) * serach_length
-    rend = q_car[:2] - np.array([np.cos(q_car[2]), np.sin(q_car[2])]) * serach_length
+    fend = q_car[:2] + np.array([np.cos(q_car[2]), np.sin(q_car[2])]) * initial_length
+    rend = q_car[:2] - np.array([np.cos(q_car[2]), np.sin(q_car[2])]) * initial_length
 
     # 앞 뒤 최소 거리
-    fd = np.abs(np.tan(q_park[2])*(fend[0]-q_park[0]) + q_park[1] - fend[1]) / np.sqrt(1 + np.tan(q_park[2])**2)
-    rd = np.abs(np.tan(q_park[2]) * (rend[0] - q_park[0]) + q_park[1] - rend[1]) / np.sqrt(1 + np.tan(q_park[2]) ** 2)
+    fd = np.linalg.norm(fend - cp)
+    rd = np.linalg.norm(rend - cp)
+
 
     # 앞이 더 짧으면
     if fd < rd:
@@ -62,18 +66,22 @@ def get_close_point(q_car, q_park, serach_length, cp):
         return rend
     # 같으면
     else:
-        # fend나 rend중 cp의 가까운 end를 반환
-        # rend가 더 가까울 때
-        if np.linalg.norm(fend - cp) > np.linalg.norm(rend - cp):
+        # 원의 중심에서 먼 점을 선택
+        fd = np.linalg.norm(fend - q_park[:2])
+        rd = np.linalg.norm(rend - q_park[:2])
+        # 앞이 더 길면
+        if fd > rd:
+            return fend
+        # 뒤가 더 길면
+        elif fd < rd:
             return rend
-        # fend 가 더 가까울 때
-        elif np.linalg.norm(fend - cp) < np.linalg.norm(rend - cp):
-            return fend
         else:
-            print("아니 이게 또 같네")
-            return fend
+            print("아니 이게 같네 ㄷㄷ")
+            
+            
 
-def get_path_ES(q_car, q_park, wDistance, wTheta, serach_length):
+
+def get_path_ES(q_car, q_park, wDistance, wTheta, initial_length):
     # 영역 디버깅 용
     # lx, ly = get_turning_circle(q_car[:2], cost(q_car, q_park, wDistance, wTheta)).T
     # return lx, ly
@@ -81,18 +89,17 @@ def get_path_ES(q_car, q_park, wDistance, wTheta, serach_length):
     # 반경 계산
     d = cost(q_car, q_park, wDistance, wTheta)
     # cp 계산
-    cp = q_park[:2] + np.array([np.cos(q_park[2]), np.sin(q_park[2])]) * d
+    cp = q_park[:2] - np.array([np.cos(q_park[2]), np.sin(q_park[2])]) * d
 
 
-    # 탐색 길이 안에서 교차하나?
-    sp = crossed_point(q_car, q_park, serach_length)
-
-    # 교점이 존재하지 않으면
-    if sp is None:
-        sp = get_close_point(q_car, q_park, serach_length, cp)
-    # 교점이 존재하고 반경 안에 존재 할 때
-    if np.linalg.norm(q_park[:2] - sp) <= d:
-        sp = cp
+    # sp 정하기
+    sp = get_close_point(q_car, q_park, cp, initial_length)
+    # # 차량이 내부에 있을때
+    # if np.linalg.norm(q_car[:2] - q_park[:2]) <= d:
+    #     sp = get_close_point(q_car, q_park, cp, initial_length)
+    # # 차량이 외부에 있을때
+    # else:
+    #     sp = get_close_point(q_car, q_park, cp, initial_length)
 
 
 
@@ -111,13 +118,16 @@ def get_path_ES(q_car, q_park, wDistance, wTheta, serach_length):
 
     # 방향 바꿀지 결정
     # qcar -> sp 벡터 각도
-    qcar2sp_theta = np.arctan2(q_car[1] - sp[1], q_car[0] - sp[0])
+    qcar2sp_theta = np.arctan2(q_car[1] - sp[1], q_car[0] - sp[0]) - np.pi
     # qcar -> sp 벡터 각도와 차량 벡터 각도의 방향이 반대일때
 
-    if qcar2sp_theta - q_car[2] > np.pi / 2: # pi/2 는 반대인지 확인하는 대략적인 값
-        dir_change_exist = 1 # cp에서 전진 후진 바꿈
+    print(np.rad2deg(qcar2sp_theta), np.rad2deg(q_car[2]))
+    
     # 방향이 같을때
-    else:
+    if  abs(qcar2sp_theta - q_car[2]) < np.pi / 2: # pi/2 는 방향이 맞는 지 확인하는 대략적인 180도보다 작은 값
         dir_change_exist = 0 # cp에서 전진 후진 안바꿈
+    # 방향이 다를 때
+    else:
+        dir_change_exist = 1 # cp에서 전진 후진 바꿈
         
     return rx, ry, cp_index, dir_change_exist
