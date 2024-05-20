@@ -15,8 +15,10 @@ import rospy
 from xycar_msgs.msg import xycar_motor
 from planning_path_circle import *
 from planning_path_line import *
-from planning_path_MPC import *
+#from planning_path_MPC import *
 from planning_path_ES import *
+from planning_path_reeds_shepp import *
+from reed_shepp_utils import *
 from PIDcontrol import track_one_step
 
 #=============================================
@@ -29,7 +31,8 @@ xycar_msg = xycar_motor()
 # 프로그램에서 사용할 변수, 저장공간 선언부
 #=============================================
 rx, ry = [], []
-cp_index = dir_change_exist = dir_changed = speed= 0
+
+# cp_index = dir_change_exist = dir_changed = speed= 0
 
 
 #=============================================
@@ -39,35 +42,37 @@ AR = (1142, 62) # AR 태그의 위치
 P_ENTRY = (1036, 162) # 주차라인 진입 시점의 좌표
 P_END = (1129, 69) # 주차라인 끝의 좌표
 
-TURNING_RADIUS = 461.5769323875713/2 # 회전 반경
+TURNING_RADIUS = 230.78846619378564 # 회전 반경
+#TURNING_RADIUS = 1
+
 
 # PID 값
 Kp = 0.5
 Ki = 0.0000001
 Kd = 0.001
 
-#경로생성 가중치
-wDistance = 25000
-wTheta = 200
-initial_length = 100
+# #경로생성 가중치
+# wDistance = 25000
+# wTheta = 200
+# initial_length = 100
+#
+# # PID 오류 탐색 원의 크기
+# DIAMETER = 200
 
-# PID 오류 탐색 원의 크기
-DIAMETER = 200
-
-# cp점 도착 여부 확인 허용 오차
-close_tolerance = 20
+# # cp점 도착 여부 확인 허용 오차
+# close_tolerance = 20
 
 
-# MPC 알고리즘 상수
-obstacle_points = ((0,0), (1080, 0), (1200, 120), (1200, 850), (0, 850))
-step_length = 10
-wTHETA = 1
-wPOS = (1, 1)  # x: 차량 진행 방향 가중치, y: 차량 수직방향 가중치
-wU = 1
-k = 10
-iMax = 10000000
-cntMax = 100
-epsilon = 50
+# # MPC 알고리즘 상수
+# obstacle_points = ((0,0), (1080, 0), (1200, 120), (1200, 850), (0, 850))
+# step_length = 10
+# wTHETA = 1
+# wPOS = (1, 1)  # x: 차량 진행 방향 가중치, y: 차량 수직방향 가중치
+# wU = 1
+# k = 10
+# iMax = 10000000
+# cntMax = 100
+# epsilon = 50
 
 #=============================================
 # 모터 토픽을 발행하는 함수
@@ -87,20 +92,41 @@ def drive(angle, speed):
 #=============================================
 def planning(sx, sy, syaw, max_acceleration, dt):
     #global rx, ry, cp_index, dir_change_exist, wDistance, wTheta, initial_length, dir_changed, speed
-    global rx, ry, obstacle_points, step_length, wTHETA, wPOS, wU, k, iMax, cntMax
-    cp_index = dir_change_exist = dir_changed = speed = 0
-    print("Start Planning")
-    rad_car = np.deg2rad(syaw+90-360)
-    q_car = np.array([sx, sy, rad_car])
-    rad_park = np.arctan2(P_ENTRY[1] - P_END[1], P_ENTRY[0] - P_END[0]) - np.pi
-    q_park = np.array([P_ENTRY[0], P_ENTRY[1], rad_park])
-    #print(f"deg_car: {np.rad2deg(rad_car)}, deg_park: {np.rad2deg(rad_park)}")
+    # global rx, ry, obstacle_points, step_length, wTHETA, wPOS, wU, k, iMax, cntMax
+    global rx, ry
 
+    rx, ry = [], []  # 리스트 초기화
+    print("Start Planning")
+    print(sx, sy)
+    # 차량 기본 위치 정보 q들
+    deg_car = rad2deg(np.deg2rad(syaw+90-360))
+    q_car = np.array([sx, sy, deg_car])
+    deg_park = rad2deg(np.arctan2(P_ENTRY[1] - P_END[1], P_ENTRY[0] - P_END[0]))
+    q_park = np.array([P_ENTRY[0], P_ENTRY[1], deg_park])
+
+    
+    # 경로 생성 알고리즘, 별도로 global 변수들 설정해줘야 하고 작동 안하는 방법도 존재
+    #print(f"deg_car: {np.rad2deg(rad_car)}, deg_park: {np.rad2deg(rad_park)}")
     #rx, ry = get_path_line(sx, sy, P_ENTRY[0], P_ENTRY[1])
     #rx, ry = get_path_circle(sx, sy, rad_car, P_ENTRY[0], P_ENTRY[1], TURNING_RADIUS)
-    rx, ry = get_path_MPC(q_car, q_park, obstacle_points, step_length, wTHETA, wPOS, wU, k, iMax, cntMax, epsilon)
+    #rx, ry = get_path_MPC(q_car, q_park, obstacle_points, step_length, wTHETA, wPOS, wU, k, iMax, cntMax, epsilon)
     #rx, ry, cp_index, dir_change_exist = get_path_ES(q_car, q_park, wDistance, wTheta, initial_length)
     #rx, ry = get_path_ES(q_car, q_park, wDistance, wTheta) # 원 디버깅용
+
+    #--------reed shepp-----------#
+    # 입력값 스케일 조정, turning_radius = 1 이 될 수 있도록, 함수에서 그렇게 사용하므로
+    q_car = scale(q_car, TURNING_RADIUS)
+    q_park = scale(q_park, TURNING_RADIUS)
+
+    rxy = get_optimal_path(q_car, q_park)
+
+    for xyi in rxy:
+        # 스케일 복구
+        rx.extend(unscale(xyi[0], TURNING_RADIUS))
+        ry.extend(unscale(xyi[1], TURNING_RADIUS))
+
+        # xyi[2] = 직진 후진 정보 1: 직진, -1: 후진
+
     return rx, ry
 
 #=============================================

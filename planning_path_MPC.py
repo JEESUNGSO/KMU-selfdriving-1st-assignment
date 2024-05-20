@@ -1,109 +1,211 @@
+import math
 import numpy as np
 
-# 좌표계를 변환하는 함수 (==========================================이 함수 고쳐야 됨!!)============================
-def To_coordinate(q_coordinates, q_):
+class VehicleState:
+    def __init__(self, x, y, theta, direction):
+        self.x = x
+        self.y = y
+        self.theta = theta
+        self.direction = direction  # 전진(+1) 또는 후진(-1)
 
-    # q_cordinate와 어떤 q점 사이의 거리
-    lengths = np.linalg.norm(q_coordinates[:, :2] - q_[:2])
-    # q_cordinate와 어떤 q점(기준) 벡터의 각도
-    thetas = np.arctan2(q_coordinates[:, 1] - q_[1], q_coordinates[:, 0] - q_[0])
-    gammas = thetas - ((np.pi / 2) + q_coordinates[:, 2])
-    lx_ = q_coordinates[:, 0] + lengths * np.sin(gammas)
-    ly_ = q_coordinates[:, 1] - lengths * np.cos(gammas)
+    def is_same(self, goal, epsilon):
+        # 상태가 비슷하면
+        if abs(self.x - goal.x) < epsilon and abs(self.y - goal.y) < epsilon and abs(self.theta - goal.theta) < np.pi/180:  #<---------------------------각도 차이
+            return True
+        # 상태가 안비슷하면
+        return False
 
-    # 좌표계 변환된 q 반환, 글로벌 각도는 유지
-    q_rad = [q_[2] for i in range(len(lx_))]
-    return np.array([lx_, ly_, q_rad]).T
+def cost_function(next_state, goal_state, steering_angle, previous_steering_angle, previous_step_length, step_length, distance_weight, angle_weight, step_length_weight, policy_weight):
+    distance_cost = distance_weight * ((next_state.x - goal_state.x)**2 + (next_state.y - goal_state.y)**2)
+    angle_cost = angle_weight * ((next_state.theta - goal_state.theta)**2)
+    step_length_cost = ((previous_step_length - step_length) ** 2) * step_length_weight
+    policy_cost = policy_weight * ((steering_angle - previous_steering_angle)**2)
+    #print(f"distance_cost: {distance_cost}, angle_cost: {angle_cost}, policy_cost: {policy_cost}")
+    return distance_cost + angle_cost + policy_cost + step_length_cost, distance_cost, angle_cost, policy_cost, step_length_cost
 
-# 장애물 점 리스트 생성
-def get_points_from_dotlist(points_list):
-    # 두점을 잇는 선분의 점집합 생성
-    def get_dots(p1, p2):
-        p1 = np.array(p1)
-        p2 = np.array(p2)
-        theta = np.arctan2(p1[1] - p2[1], p1[0] - p2[0])
-        l = np.arange(0, np.linalg.norm(p1 - p2), 1)
-        lx = p1[0] + l * np.cos(theta)
-        ly = p1[1] + l * np.sin(theta)
-        lxy = np.array([lx, ly]).T
-        return lxy
+def is_obstacle(next_state, obstacles):
+    # 장애물에 부딪히면
+    for obstacle in obstacles:
+        if np.sqrt((obstacle[0] -next_state.x)**2 + (obstacle[1] - next_state.y)**2) < obstacle[2]:
+            return True
+
+    # 경계에 부딪히면
+    if next_state.x < 0 or next_state.x > 60 or next_state.y < 0 or next_state.y > 25:
+        return True
+    # 장애물에 안부딪히면
+    return False
+
+def bicycle_model(state, steering_angle, step_length, steering_mul):
+    # new_x = state.x + state.direction * step_length * math.cos(state.theta + state.direction * steering_mul * np.deg2rad(steering_angle) / 2)
+    # new_y = state.y + state.direction * step_length * math.sin(state.theta + state.direction * steering_mul * np.deg2rad(steering_angle) / 2)
+    # new_theta = state.theta + state.direction * steering_mul * np.deg2rad(steering_angle) / 2
+    # return VehicleState(new_x, new_y, new_theta, state.direction)
+
+    new_x = state.x + state.direction * step_length * math.cos(state.theta + state.direction * step_length * np.deg2rad(steering_angle) / 2)
+    new_y = state.y + state.direction * step_length * math.sin(state.theta + state.direction * step_length * np.deg2rad(steering_angle) / 2)
+    new_theta = state.theta + state.direction * step_length * np.deg2rad(steering_angle)
+    return VehicleState(new_x, new_y, new_theta, state.direction)
+
+# # bicycle_model 테스트
+# import matplotlib.pyplot as plt
+#
+# steering_angles = np.deg2rad(np.linspace(-50, 50, 10))
+# a_state = VehicleState(20, 20, np.pi/1.4, 1)
+# plt.scatter([a_state.x], [a_state.y])
+# for steering_angle in steering_angles:
+#     next_state = bicycle_model(a_state, steering_angle, 2, 40)
+#     plt.scatter([next_state.x], [next_state.y])
+#
+# plt.axis([0, 50, 0, 40])
+# plt.show()
 
 
 
-    for i in range(len(points_list)):
-        # 처음 점일 때
-        if i == 0:
-            result = get_dots(points_list[i], points_list[0])
-        # 마지막 점일때
-        elif i == len(points_list)-1:
-            np.concatenate((result, get_dots(points_list[i], points_list[0])))
-        # 마지막 점이 아닐 때
-        else:
-            np.concatenate((result, get_dots(points_list[i], points_list[i+1])))
+def find_optimal_path(start, goal, obstacles, distance_weight, angle_weight, step_length_weight, policy_weight, k, iMax, cntMax, epsilon, steering_mul, max_step_length):
+    steering_angles = np.linspace(-50, 50, num=10)  # 조향 각도 후보들
+    step_lengths = np.linspace(1, max_step_length, 20)
 
-    return result
+    path = [[start.x, start.y, start.direction]]
+    current_state = start
+    previous_steering_angle = 0
+    previous_step_length = 1
+    best_next_state = None
+    current_cost = np.inf
+
+    # cost 값들 그래프로 표시하기 위해서
+    distance_costs = []
+    angle_costs = []
+    policy_costs = []
+    cost_ratios = []
+    step_length_costs = []
 
 
 
-# 비용함수, q_is: q_i 후보들, q_park: 도착지점, u_is: q_iplus1s를 만드는 정책, u_iminus1: q_i를 만들었던 정책
-def cost(q_iplus1s, q_park, u_is, u_iminus1, wTHETA, wPOS, wU):
-    # q_iplus1 좌표계 기준으로 변경된 q_park들
-    q_parks = To_coordinate(q_iplus1s, q_park)
-    eposS = [(( q_parks[:, :2]) ** 2)[:, 0] * wPOS[0], ((q_parks[:, :2]) ** 2)[:, 1] * wPOS[1]]
-    ethetaS = (q_iplus1s[:, 2] - q_park[2]) ** 2
-    deltauS = (u_is - u_iminus1) ** 2
 
-    # etheta: 후보 위치와 도착지점 각도 차이, epos: 멘하턴 거리, deltau: 이전정책과 현재 정책 변화량
-    return wTHETA * ethetaS + np.sum(eposS) + wU * deltauS
-    
-
-# q_car: 차량 출발 위치, q_park: 주차 위치, w~: 가중치, step_length: 한번 탐색 길이(이거는 알아내야 함), k: 비용 최대 허용 증가 배수 가중치
-# iMax: 최대 경로 탐색 횟수, cntMax: 최대 경로 변경 횟수, epsilon: 근접 판정 허용치
-def get_path_MPC(q_car, q_park, obstacle_points, step_length, wTHETA, wPOS, wU, k, iMax, cntMax, epsilon):
-    # 결과 경로 리스트
-    result = []
-    # 변수 초기화
-    q_i = q_car # 초기 시작점
-    u_iminus1 = 0 # 초기 조정값은 0
-    cost_i = np.inf
-    D = 1 # 기본 진행 방향
-    cnt = 0 # 진행 방향 횟수
-    i = 0 # 경로 탐색 진행 횟수
-
-    # 장애물 점의 집합 계산
-    obstacles = get_points_from_dotlist(obstacle_points)
-
-    # 경로 탐색
+    # 종료 감지 변수들
+    i = 0 # 전체 길찾기 시도 횟수
+    cnt = 0 # 방향 전환 횟수
     while True:
-        print("q_i: ", q_i)
-        #경로 추가
-        result.append(q_i[:2])
+
+        is_direction_changed = False
+        # 도착
+        if current_state.is_same(goal, epsilon):
+            # 도착 했으므로 탐색 종료
+            print("찾았다 ㅎㅎ")
+            return path, distance_costs, angle_costs, policy_costs, cost_ratios, step_length_costs
+        elif i > iMax:
+            # 길 못찾음
+            print("최대 탐색 한도 넘음")
+            return path, distance_costs, angle_costs, policy_costs, cost_ratios, step_length_costs
+        elif cnt >= cntMax:
+            # 길 못찾음
+            print("너무 많은 방향 전환")
+            return path, distance_costs, angle_costs, policy_costs, cost_ratios, step_length_costs
 
 
-        # 모든 후보점 탐색, theta p_i 점에서 원을 회전시켜서 얻는 점들
-        candi_us = np.array([u for u in np.linspace(-np.deg2rad(50), np.deg2rad(50), 100)])
-        candi_qs = np.array([[q_i[0] + D*step_length*np.cos(q_i[2] + D*step_length*u/2), q_i[1] + D*step_length*np.sin(q_i[2] + D*step_length*u/2), q_i[2] + D*step_length*u] for u in np.linspace(-np.deg2rad(50), np.deg2rad(50), 100)])
-        candi_costs = cost(candi_qs, q_park, candi_us, u_iminus1, wTHETA, wPOS, wU)
 
-        # 후보점들 중 코스트가 최소인 q_iplus1 구하기
-        q_iplus1_index = np.argmin(candi_costs)
-        cost_iplus1 = candi_costs[q_iplus1_index]
-        q_iplus1 = candi_qs[q_iplus1_index]
-        u_i= candi_us[q_iplus1_index] # 최적 정책
+        # 모든 정책들 시도하기
+        min_next_cost = np.inf
+        for steering_angle in steering_angles:
+            for step_length in step_lengths:
+                next_state = bicycle_model(current_state, steering_angle, step_length, steering_mul)
 
-        # 진행 방향 변경 지점 찾기(cost가 급격하게 상승할때, 최적 정책으로 진행하면 장애물을 만날때)
-        if cost_iplus1 > k * cost_i and np.linalg.norm(obstacles - q_iplus1) < epsilon:
-            D *= -1 # 방향 전환
-            cnt += 1
-        # 계속해서 다음 진행 방향 탐색
+                next_cost, distance_cost, angle_cost, policy_cost, step_length_cost = cost_function(next_state, goal, steering_angle, previous_step_length, step_length, previous_steering_angle, distance_weight, angle_weight, step_length_weight, policy_weight)
+
+                if next_cost < min_next_cost:
+                    min_next_cost = next_cost
+                    best_next_state = next_state
+                    best_steering_angle = steering_angle
+                    best_step_legnth = step_length
+                    best_next_distance_cost = distance_cost
+                    best_next_angle_cost = angle_cost
+                    best_next_policy_cost = policy_cost
+
+
+        # cost 비율 추가
+        cost_ratios.append(min_next_cost/current_cost)
+        distance_costs.append(best_next_distance_cost)
+        angle_costs.append(best_next_angle_cost)
+        policy_costs.append(best_next_policy_cost)
+        step_length_costs.append(step_length_cost)
+
+        # 최적정책이 장애물을 만날때
+        if is_obstacle(best_next_state, obstacles):
+            print("최적정책에 장애물 감지!        -> 방향전환")
+            current_state.direction *= -1  # 장애물 회피를 위해 방향 전환
+            cnt += 1  # 방향 전환 횟수 추가
+        # 최적정책 cost 값이 갑자기 증가할때
+        elif min_next_cost/current_cost > k:
+            print("너무 값이 큼!                -> 방향전환")
+            current_state.direction *= -1 # 이 방향으로 가면 너무 돌아갈 길이 김
+            cnt += 1 # 방향 전환 횟수 추가
+
         else:
-            q_i = q_iplus1
-            u_iminus1 = u_i
+            path.append([best_next_state.x, best_next_state.y, current_state.direction])
+            current_state = best_next_state
+            previous_steering_angle = best_steering_angle
+            previous_step_length = best_step_legnth
+            current_cost = min_next_cost
 
 
-        # 탐색 종료 시점 판별
-        if np.linalg.norm(q_i[:2] - q_park[:2]) < epsilon or i > iMax or cnt > cntMax:
-            break
+        i += 1 # 길찾기 시도횟수 추가
 
-    result = np.array(result).T
-    return result[0], result[1]
+
+# 예제 사용법
+obstacles = []
+start = VehicleState(1, 1, 0, 1)
+goal = VehicleState(55, 23, np.pi/4, 1)  # 도착 지점을 그리드 크기에 맞게 수정
+distance_weight = 10
+angle_weight = 400
+step_length_weight = 0.0000001
+policy_weight = 1
+k = 200
+epsilon = 1
+iMax = 1000
+cntMAx = 100
+steering_mul = 0.8
+max_step_length = 2
+
+path, distance_costs, angle_costs, policy_costs, cost_ratios, step_length_costs = find_optimal_path(start, goal, obstacles, distance_weight, angle_weight, step_length_weight, policy_weight, k, iMax, cntMAx, epsilon, steering_mul, max_step_length)
+
+
+# import matplotlib.pyplot as plt
+#
+# plt.figure(figsize=(6,12))
+#
+# #=======================맵 표시================================
+# plt.subplot(6,1, 1)
+# plt.axis([0, 60, 0, 25])
+# # 출발, 도착지점 표시
+# c = plt.Circle((start.x,start.y), 1, fc='w', ec='b')
+# plt.gca().add_patch(c)
+# c = plt.Circle((goal.x,goal.y), 1, fc='w', ec='b')
+# plt.gca().add_patch(c)
+# # 경로 표시
+# path = np.array(path).T
+# plt.plot(path[0], path[1], '-ro', markersize=2)
+# # 장애물 표시
+# for obstacle in obstacles:
+#     c = plt.Circle(obstacle[:2], obstacle[2], fc='w', ec='b')
+#     plt.gca().add_patch(c)
+#
+# #===================each cost====================
+# #distance
+# plt.subplot(6,1, 2)
+# plt.plot(distance_costs, 'r')
+# #angle
+# plt.subplot(6,1, 3)
+# plt.plot(angle_costs, 'g')
+# #policy
+# plt.subplot(6,1, 4)
+# plt.plot(policy_costs, 'b')
+# #step_length
+# plt.subplot(6,1, 5)
+# print(step_length_costs[3])
+# plt.plot(step_length_costs, 'r')
+#
+# #===================cost ratio===================
+# plt.subplot(6,1, 6)
+# plt.plot(cost_ratios)
+#
+# plt.show()
