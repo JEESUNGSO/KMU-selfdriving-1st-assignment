@@ -70,22 +70,17 @@ def path_length(path):
     return sum([e.param for e in path])
 
 # element들을 사용하여 위치를 이동하고 경로좌표와 나중 위치를 반화하는 함수
-def move_next(current, element, turning_radius):
+def move_next(current, element):
     gear = 1 if element.gear == Gear.FORWARD else -1
     if element.steering == Steering.LEFT:
         # gear * element.param 왼쪽회전 최소 회전반경으로 얼마나 돌지
-        rxi, ryi, next_theta = get_list_L(current, gear * element.param, turning_radius, np.pi/180)
-
-
-
+        rxi, ryi, next_theta = get_list_L(current, gear * element.param, np.pi/180)
     elif element.steering == Steering.RIGHT:
         # gear * element.param 오른쪽회전 최소 회전반경으로 얼마나 돌지
-        rxi, ryi, next_theta = get_list_R(current, gear * element.param, turning_radius, np.pi/180)
-
-
+        rxi, ryi, next_theta = get_list_R(current, gear * element.param, np.pi/180)
     elif element.steering == Steering.STRAIGHT:
         # gear * element.param 직선으로 얼마나 갈지
-        rxi, ryi, next_theta = get_list_forward(current, gear * element.param, 0.05)
+        rxi, ryi, next_theta = get_list_forward(current, gear * element.param, 0.01)
 
 
     # 경로 점들 및 다음위치 반환
@@ -93,29 +88,54 @@ def move_next(current, element, turning_radius):
 
 
 # 최적 경로 찾기, 가장 짧은 경로를 반환, 각 조작(C,L)들을 나누서 방향과 함께 나눠진 리스트로 반환 [rxi, ryi, geari]
-def get_optimal_path(start, end):
+def get_optimal_path(start, end, MAP, P_ENTRY, P_END, padding):
     # turning_radius = 1인 기준으로 만들어진 함수
     turning_radius = 1
 
     # 최적 경로 찾기
     paths = get_all_paths(start, end)
-    optimal_path = min(paths, key=path_length)
+    while True:
+        collision = False
+        optimal_path = paths.pop(paths.index(min(paths, key=path_length)))
 
-    print(optimal_path)
+        # print(optimal_path)
 
-    # move_next의 current는 degree
+        # move_next의 current는 degree
 
-    # element로 만든 경로의 집합 (rxi ,ryi, geari)
-    rxy = []
+        # element로 만든 경로의 집합 (rxi ,ryi, geari)
+        rxy = []
+
+        current = start # 현재 위치
+        for element in optimal_path:
+            # 다음 위치로 이동 및 current 값 업데이트
+            rxi, ryi, current, geari = move_next(current, element)
+
+            # 경로 리스트 추가
+            rxy.append((rxi, ryi, geari))
+
+            # 충돌이 발생하는지 확인
+            if is_collision(rxi, ryi, MAP, P_ENTRY, P_END, padding):
+                collision = True
+                break
+        
+        # 충돌 없는 최적경로 발견시
+        if not collision:
+            break
+        else:
+            print("충돌발생! 다음 최적 경로 탐색 합니다.")
 
 
-    current = start # 현재 위치
-    for element in optimal_path:
-        # 다음 위치로 이동 및 current 값 업데이트
-        rxi, ryi, current, geari = move_next(current, element, turning_radius)
 
-        # 경로 리스트 추가
-        rxy.append((rxi, ryi, geari))
+
+    # 도착지점 주차 경로 추가
+    # 마지막 경로의 방향이 주차진입 방향과 같을때
+    if np.arctan2(rxy[-1][0][-2] - rxy[-1][0][-1], rxy[-1][1][-2] - rxy[-1][1][-1]) - M(deg2rad(end[2])) < np.pi / 2:  # pi/2는 대략적인 방향 확인값
+        rxy.append((None, None, geari))
+    else:
+        rxy.append((None, None, -geari))
+
+
+
     return rxy
 
 

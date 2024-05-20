@@ -28,7 +28,7 @@ def rotate_by_vec(vec, ref_vec):
 
 def get_error(xy, lxy, velo, di):
     # 교점 후보 허용 오차
-    tolerance = 4
+    tolerance = 10
 
     # 모든 path 점들과 거리 구하기
     dx = lxy[0] - xy[0]
@@ -45,21 +45,20 @@ def get_error(xy, lxy, velo, di):
     # 원 위의 점들
     distance_on[(distance > di + tolerance)] = 0
     distance_on[(distance < di - tolerance)] = 0
-    #print(f"larger: {distance_largers[distance_largers!=0].shape[0]}, smaller: {distance_smallers[distance_smallers!=0].shape[0]}, on: {distance_on[distance_on!=0].shape[0]}")
 
     if np.min(distance_largers) > di - tolerance: # 점이 밖에 있을때
-        print("larger!!!")
+        print("교점이 없습니다. 가장 가까운 점을 에러 점으로 사용합니다.")
         sel_p_index = np.max(np.argsort(distance_largers)[1:4])
         selected_point = lxy.T[sel_p_index]
 
 
     else: # 점이 원 위나 안에 있을때
-        if len(np.where(np.where(distance_smallers != 0)[0] >= distance.shape[0]-2)[0]): # 마지막 점이 원 안에 있으면 (마지막에 가까운점)
-            print("end point is inside!")
+        if len(np.where(np.where(distance_smallers != 0)[0] >= distance.shape[0]-2)[0]): # element 추적의 마지막 점이 원 안에 있으면 (마지막에 가까운점)
+            print("element의 마지막점이 탐색원 내부에 존재합니다.")
             sel_p_index = np.max(distance.shape[0]-1)
             selected_point = lxy.T[sel_p_index]
         else: # 점이 위에있을 때
-            print("on circle!!!")
+            print("교점이 있습니다. element의 가장 나중 점을 에러 점으로 사용합니다.")
             sel_p_index = np.max(np.argsort(distance_on)[-4:-1])
             selected_point = lxy.T[sel_p_index]
 
