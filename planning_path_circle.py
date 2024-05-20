@@ -1,63 +1,76 @@
 import numpy as np
 
-
-
-
-
 def get_turning_circle(c_pos, cdirection, turning_radius, density):
     cdir_vertical = cdirection - np.pi / 2
-    # 오른쪽
+    # 오른쪽 회전
     turning_center_R = c_pos + np.array([np.cos(cdir_vertical), np.sin(cdir_vertical)]) * turning_radius
     turning_points_R = np.array([turning_center_R + np.array([np.cos(theta), np.sin(theta)]) \
-                         * turning_radius for theta in np.linspace(0, np.pi * 2, density)])
-    # 왼쪽
+                                 * turning_radius for theta in np.linspace(0, np.pi * 2, density)])
+    # 왼쪽 회전
     turning_center_L = c_pos - np.array([np.cos(cdir_vertical), np.sin(cdir_vertical)]) * turning_radius
     turning_points_L = np.array([turning_center_L + np.array([np.cos(theta), np.sin(theta)]) \
-                               * turning_radius for theta in np.linspace(0, np.pi * 2, density)])
+                                 * turning_radius for theta in np.linspace(0, np.pi * 2, density)])
 
-    return turning_points_R, turning_points_L
+    return turning_points_R, turning_points_L, turning_center_R, turning_center_L
 
 
-def get_tanget_line(circle1, circle2, diameter):
-    # circle1, circle2 각각 원의 중심 좌표
-    # diameter : 원의 지름
-    r = diameter / 2
-    
-    distance = np.pow((circle1[0] - circle2[0]), 2) + np.pow((circle1[1] - circle2[1]), 2)
-    distance = np.sqrt(distance) # 윈의 중심 사이의 거리
-    # theta : 원의 중심을 잇는 선분과 두개의 평행한 접선이 이루는 각
-    tan_theta = r / distance
-    theta = np.arctan(tan_theta)
-    offset = np.array([np.sin(theta), -np.cos(theta)])
-    point_l1_c1 = circle1 + offset
-    point_l1_c2 = circle2 + offset
-    point_l4_c1 = circle1 - offset
-    point_l4_c2 = circle2 - offset
+def get_tangent_lines(c1, r1, c2, r2):
+    def compute_tangents(x1, y1, r1, x2, y2, r2, outer=True):
+        d = np.hypot(x2 - x1, y2 - y1)
+        if d < abs(r1 - r2):
+            return []
 
-    # delta : 나머지 교차하는 접선과 원의 중심을 잇는 선분이 이루는 각
-    sin_delta = (distance / 2) / (r)
-    delta = np.arcsin(sin_delta)
-    
-    
-    
+        tangents = []
+        if outer:
+            r_diff = r1 - r2
+        else:
+            r_diff = r1 + r2
 
-def get_path_circle(cx, cy, cdirection, gx, gy, turning_radius):
-    # 회전 반경 원 점 개수
+        angle_between_centers = np.arctan2(y2 - y1, x2 - x1)
+        angle_offset = np.arccos(r_diff / d)
+
+        for sign in [-1, 1]:
+            theta = angle_between_centers + sign * angle_offset
+            if outer:
+                t1 = (x1 + r1 * np.cos(theta), y1 + r1 * np.sin(theta))
+                t2 = (x2 + r2 * np.cos(theta), y2 + r2 * np.sin(theta))
+            else:
+                t1 = (x1 + r1 * np.cos(theta), y1 + r1 * np.sin(theta))
+                t2 = (x2 - r2 * np.cos(theta), y2 - r2 * np.sin(theta))
+
+            tangents.append((t1, t2))
+        return tangents
+
+    x1, y1 = c1
+    x2, y2 = c2
+
+    outer_tangents = compute_tangents(x1, y1, r1, x2, y2, r2, outer=True)
+    return outer_tangents
+
+
+def get_path_circle(cx, cy, cdirection, gx, gy, gdirection, turning_radius):
     density = 100
-    
-    # 차량 위치 벡터
+
     start_pos = np.array([cx, cy])
     end_pos = np.array([gx, gy])
 
-    # 출발점 회전 반경
-    start_turning_R, start_turning_points_L = get_turning_circle(start_pos, cdirection, turning_radius, density)
-    # 도착점 회전 반경
-    end_turning_R, end_turning_L = get_turning_circle(end_pos, cdirection, turning_radius, density)
+    start_turning_R, start_turning_L, start_center_R, start_center_L = get_turning_circle(start_pos, cdirection,
+                                                                                          turning_radius, density)
+    end_turning_R, end_turning_L, end_center_R, end_center_L = get_turning_circle(end_pos, gdirection, turning_radius,
+                                                                                  density)
 
-    # 접선 찾기
+    start_turning_centers = [start_center_R, start_center_L]
+    end_turning_centers = [end_center_R, end_center_L]
 
+    tangents = []
+    for s_center in start_turning_centers:
+        for e_center in end_turning_centers:
+            tangents.extend(get_tangent_lines(s_center, turning_radius, e_center, turning_radius))
 
+    path_x, path_y = [], []
+    if tangents:
+        for (sx, sy), (ex, ey) in tangents:
+            path_x.extend([sx, ex])
+            path_y.extend([sy, ey])
 
-    return np.concatenate((start_turning_R.T[0], end_turning_R.T[0]), axis=0), \
-        np.concatenate((start_turning_R.T[1], end_turning_R.T[1]), axis=0)
-
+    return path_x, path_y
