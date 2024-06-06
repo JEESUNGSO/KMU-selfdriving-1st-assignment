@@ -28,8 +28,8 @@ rx, ry = [], []
 rxy = []
 e_index = 0 # 현재 element의 인덱스
 paths_length = [] # 각 element의 경로 갯수
+dir_change = 1 # 현제 element와 다음 element의 방향전환 존재 여부 --> margin_index를 추가할지 아니면 0으로 할지 결정
 
-# cp_index = dir_change_exist = dir_changed = speed= 0
 
 
 
@@ -45,6 +45,7 @@ ENTRY_MARGIN = 50 # 도착지점 추가 마진 거리
 
 # 전면주차, 후면 주차 여부
 IS_FRONT = 1 # 1: 전면 주차, 0: 후면주차
+EPSILON_X = -6 # 전후 방향 허용 오차, 좀더 들어가도 되므로 음수까지(중앙을 지나쳐야) 가야 완벽히 초록불이 들어옴
 
 # 경로 생성시 참조할 차량의 회전 반경
 TURNING_RADIUS = 270 # 회전 반경
@@ -94,12 +95,13 @@ def drive(angle, speed):
 # 경로를 리스트를 생성하여 반환한다.
 #=============================================
 def planning(sx, sy, syaw, max_acceleration, dt):
-    global rx, ry, rxy, e_index, paths_length, IS_FRONT
+    global rx, ry, rxy, e_index, paths_length, dir_change
     # 변수 초기화
     speed = 50
     e_index = 0
     paths_length = []
     rx, ry = [], []  # 리스트 초기화
+    dir_change = 1
 
     print("Start Planning")
     
@@ -141,7 +143,7 @@ def planning(sx, sy, syaw, max_acceleration, dt):
 #=============================================
 def tracking(screen, x, y, yaw, current_speed, max_acceleration, dt):
     #global rx, ry, Kp, Ki, Kd, DIAMETER, D, dir_change_exist, dir_changed, speed, close_tolerance
-    global rxy, TURNING_RADIUS, e_index, paths_length, MARGIN_INDEX
+    global rxy, e_index, paths_length, dir_change
 
     # 값들 전처리
     direction = np.deg2rad(-yaw)
@@ -149,7 +151,6 @@ def tracking(screen, x, y, yaw, current_speed, max_acceleration, dt):
 
     
     # 차량이 주차 중심에 충분히 접근하면 종료
-    epsilon_x = -6 # 전후 방향 허용 오차, 좀더 들어가도 되므로 음수까지(중앙을 지나쳐야) 가야 완벽히 초록불이 들어옴
     epsilon_y = 19 # 좌우 방향 허용 오차 거리
     # 차량 좌표계 기준으로 주차 중심 좌표 구하고 정면 거리 구하기
     # 자동차 기준 좌표계에서 주차 중심의 x값으로 거리를 측정 하므로 주차 중심의 각도는 안중요해서 0으로 뒀음
@@ -159,7 +160,7 @@ def tracking(screen, x, y, yaw, current_speed, max_acceleration, dt):
 
     print(x_, y_)
     # 주차 완료 일때
-    if x_ < epsilon_x and abs(y_) < epsilon_y:
+    if x_ < EPSILON_X and abs(y_) < epsilon_y:
         print("주차 완료~~~~~~!! ^^")
         drive(0, 0)
         
@@ -187,8 +188,7 @@ def tracking(screen, x, y, yaw, current_speed, max_acceleration, dt):
             u *= rxy[-1][2]  # 차량의 조향을 설정, 후진할땐 핸들을 반대로
     
     
-        # 현제 element와 다음 element의 방향전환 존재 여부 --> margin_index를 추가할지 아니면 0으로 할지 결정
-        dir_change = 1 # 기본값 초기화
+        
         if e_index < len(rxy)-1:
             if rxy[e_index][2] != rxy[e_index+1][2]: # 방향 값이 다른지
                 dir_change = 1
