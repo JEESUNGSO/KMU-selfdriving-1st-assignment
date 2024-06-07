@@ -45,7 +45,7 @@ ENTRY_MARGIN = 50 # 도착지점 추가 마진 거리
 
 # 전면주차, 후면 주차 여부
 IS_FRONT = 1 # 1: 전면 주차, 0: 후면주차
-EPSILON_X = -6 # 전후 방향 허용 오차, 좀더 들어가도 되므로 음수까지(중앙을 지나쳐야) 가야 완벽히 초록불이 들어옴
+EPSILON_X = -7 # 전후 방향 허용 오차, 좀더 들어가도 되므로 음수까지(중앙을 지나쳐야) 가야 완벽히 초록불이 들어옴
 
 # 경로 생성시 참조할 차량의 회전 반경
 TURNING_RADIUS = 270 # 회전 반경
@@ -201,7 +201,7 @@ def tracking(screen, x, y, yaw, current_speed, max_acceleration, dt):
     
     
             # 다음 인덱스 전환 감지
-            epsilon = 15 # 도착 감지 허용 오차
+            epsilon = 20 # 도착 감지 허용 오차
             if np.linalg.norm(np.array([x, y]) - np.array([rxi[paths_length[e_index] + MARGIN_INDEX*dir_change], ryi[paths_length[e_index] + MARGIN_INDEX*dir_change]])) < epsilon:
                 e_index += 1
         else:
