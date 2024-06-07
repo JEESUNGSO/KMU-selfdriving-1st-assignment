@@ -1,5 +1,5 @@
 """
-아래 코드는 https://github.com/nathanlct/reeds-shepp-curves에서 가져왔음
+some codes is from https://github.com/nathanlct/reeds-shepp-curves
 
 참고 논문:
 OPTIMAL PATHS FOR A CAR THAT GOES BOTH FORWARDS AND BACKWARDS
@@ -88,7 +88,7 @@ def move_next(current, element):
 
 
 # 최적 경로 찾기, 가장 짧은 경로를 반환, 각 조작(C,L)들을 나누서 방향과 함께 나눠진 리스트로 반환 [rxi, ryi, geari]
-def get_optimal_path(start, end, MAP, P_ENTRY, P_END, padding):
+def get_optimal_path(start, end, MAP, P_ENTRY, P_END, padding, TURNING_RADIUS):
     # turning_radius = 1인 기준으로 만들어진 함수
     turning_radius = 1
 
@@ -114,7 +114,7 @@ def get_optimal_path(start, end, MAP, P_ENTRY, P_END, padding):
             rxy.append((rxi, ryi, geari))
 
             # 충돌이 발생하는지 확인
-            if is_collision(rxi, ryi, MAP, P_ENTRY, P_END, padding):
+            if is_collision(rxi, ryi, MAP, P_ENTRY, P_END, padding, TURNING_RADIUS):
                 collision = True
                 break
         

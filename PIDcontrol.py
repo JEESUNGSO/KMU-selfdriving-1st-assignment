@@ -2,15 +2,15 @@ import numpy as np
 
 
 def P(Kp, error):
-    return -Kp * error
+    return Kp * error
 
 
 def I(Ki, error, accuE, dt):
-    return -Ki * (accuE + dt * error)
+    return Ki * (accuE + dt * error)
 
 
 def D(Kd, error, bef_error, dt):
-    return -Kd * (error - bef_error) / dt
+    return Kd * (error - bef_error) / dt
 
 
 # 벡터 회전 함수
@@ -85,6 +85,10 @@ def get_error(xy, lxy, velo, di):
 
 accuE = bef_error = 0
 
+def init_PID():
+    global accuE, bef_error
+    accuE = bef_error = 0
+
 def track_one_step(pos, velo, lxy, Kp, Ki, Kd, diameter, dt):
     global accuE, bef_error
     pos = np.array(pos, dtype=float)
@@ -105,4 +109,4 @@ def track_one_step(pos, velo, lxy, Kp, Ki, Kd, diameter, dt):
     #==컨트롤 하기==
     u = p + d + i
 
-    return u, sel_p
+    return -u, sel_p

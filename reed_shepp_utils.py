@@ -91,29 +91,36 @@ def scale(x, turning_radius):
 
 
 # 결과값을 다시 스케일을 바꿔야 하는데 인풋이 리스트임
-def unscale(x, TRUNING_RADIUS):
+def unscale(x, TURNING_RADIUS):
     if type(x) is tuple or type(x) is list:
         return [p / TRUNING_RADIUS for p in x]
-    return x * TRUNING_RADIUS
+    return x * TURNING_RADIUS
 
 
 
 
 # 장애물에 부딫 히는 경우
-def is_collision(rxi, ryi, MAP, P_ENTRY, P_END, padding):
+def is_collision(rxi, ryi, MAP, P_ENTRY, P_END, padding, TURNING_RADIUS):
     # padding = 장애물로부터 얼마나 떨어진 지점까지 장애물로 취급할지
+    # change scale
+    rxi_unscaled = unscale(rxi, TURNING_RADIUS)
+    ryi_unscaled = unscale(ryi, TURNING_RADIUS)
+
     # x값이 창 범위를 벗어나는지
-    if np.sum((rxi < 0 + padding).astype(int)) or np.sum((rxi > MAP[0] - padding).astype(int)):
+    if np.sum((rxi_unscaled < 0 + padding).astype(int)) or np.sum((rxi_unscaled > MAP[0] - padding).astype(int)):
+        print(f"x axis over limit: {MAP[0] - padding}, max: {np.max(rxi_unscaled)}")
         return True
     # y값이 창 범위를 벗어나는지
-    elif np.sum((ryi < 0 + padding).astype(int)) or np.sum((ryi > MAP[1] - padding).astype(int)):
+    elif np.sum((ryi_unscaled < 0 + padding).astype(int)) or np.sum((ryi_unscaled > MAP[1] - padding).astype(int)):
+        print(f"y axis over limit: {MAP[1] - padding}, max: {np.max(ryi_unscaled)}")
         return True
 
     # 주차 하는 벽에 부딪히는지 확인
-    alpha = np.arctan2(P_ENTRY[1] - P_END[1], P_ENTRY[0] - P_END[0]) - np.pi
+    alpha = np.arctan2(P_ENTRY[1] - P_END[1], P_ENTRY[0] - P_END[0]) - np.pi/2
     a = np.tan(alpha)
-    distance = np.abs(a*(rxi - P_ENTRY[0]) + P_ENTRY[1] - ryi) / np.sqrt(1 + a**2)
+    distance = np.abs(a*(rxi_unscaled - P_END[0]) + P_END[1] - ryi_unscaled) / np.sqrt(1 + a**2)
     if np.sum((distance < padding).astype(int)):
+        print("collision with parking wall")
         return True
     
     # 충돌 안하면

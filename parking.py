@@ -13,7 +13,7 @@ import rospy
 from xycar_msgs.msg import xycar_motor
 from planning_path_reeds_shepp import *
 from reed_shepp_utils import *
-from PIDcontrol import track_one_step
+from PIDcontrol import track_one_step, init_PID
 
 #=============================================
 # 모터 토픽을 발행할 것임을 선언
@@ -41,24 +41,24 @@ P_ENTRY = (1036, 162) # 주차라인 진입 시점의 좌표
 P_END = (1129, 69) # 주차라인 끝의 좌표
 MAP = (1200, 850) # 맵 사이즈
 
-ENTRY_MARGIN = 50 # 도착지점 추가 마진 거리
+ENTRY_MARGIN = 70 # 도착지점 추가 마진 거리
 
 # 전면주차, 후면 주차 여부
 IS_FRONT = 1 # 1: 전면 주차, 0: 후면주차
-EPSILON_X = -7 # 전후 방향 허용 오차, 좀더 들어가도 되므로 음수까지(중앙을 지나쳐야) 가야 완벽히 초록불이 들어옴
+EPSILON_X = -5 # 전후 방향 허용 오차, 좀더 들어가도 되므로 음수까지(중앙을 지나쳐야) 가야 완벽히 초록불이 들어옴
 
 # 경로 생성시 참조할 차량의 회전 반경
 TURNING_RADIUS = 270 # 회전 반경
 
 # 장애물(벽 및 주차 벽)의 부피 추가
-padding = 100 / TURNING_RADIUS
+padding = 100 
 
 # 마진 설정
-MARGIN_LENGTH = 300 # 끝부분 마진 거리
+MARGIN_LENGTH = 150 # 끝부분 마진 거리
 MARGIN_INDEX = 40 # 마진 인덱스
 
 # # PID 오류 탐색 원의 크기
-DIAMETER = 150
+DIAMETER = 100
 
 # PID 값 1
 # Kp = 0.5
@@ -76,9 +76,14 @@ DIAMETER = 150
 # Kp = 0.5
 # Ki = 0.0000001
 # Kd = 0.001
+# PID 
+# Kp = 0.5
+# Ki = 0.007
+# Kd = 0.0015
+
 # PID 값 최종
-Kp = 0.5
-Ki = 0.007
+Kp = 0.9
+Ki = 0.01
 Kd = 0.0015
 
 #=============================================
@@ -100,6 +105,7 @@ def drive(angle, speed):
 def planning(sx, sy, syaw, max_acceleration, dt):
     global rx, ry, rxy, e_index, paths_length, dir_change
     # 변수 초기화
+    init_PID()
     speed = 50
     e_index = 0
     paths_length = []
@@ -123,7 +129,7 @@ def planning(sx, sy, syaw, max_acceleration, dt):
     q_car = scale(q_car, TURNING_RADIUS)
     q_park = scale(q_park, TURNING_RADIUS)
 
-    rxy = get_optimal_path(q_car, q_park, MAP, P_ENTRY, P_END, padding)
+    rxy = get_optimal_path(q_car, q_park, MAP, P_ENTRY, P_END, padding, TURNING_RADIUS)
 
 
     for xyi in rxy:
